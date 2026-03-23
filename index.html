@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#0d1117">
+    <title>İD TAKİP</title>
+    <link rel="icon" type="image/png" href="icon.png">
+    <link rel="apple-touch-icon" href="icon.png">
+    <link rel="manifest" href="manifest.json">
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('sw.js');
+        });
+      }
+    </script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;900&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
+    <style>
+        :root {
+            --bg: #0d1117; --surface: #161b22; --accent: #7cfc00; 
+            --neon-cyan: #00f2ff; 
+            --v62-color: #00d4ff; --v63-color: #ffaa00;
+            --text-main: #f0f6fc; --text-dim: #8b949e;
+            --border: rgba(240, 246, 252, 0.1);
+            --danger: #ff4d4d;
+            --warning: #ffaa00;
+        }
+
+        html, body { background-color: var(--bg); height: 100%; margin: 0; overflow-x: hidden; scroll-behavior: smooth; }
+        body { color: var(--text-main); font-family: 'Outfit', sans-serif; padding: 20px 15px; min-height: 100vh; visibility: hidden; }
+        * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; outline: none; border: none !important; }
+
+        .glass-card { background: var(--surface); border: 1px solid var(--border) !important; border-radius: 40px; width: 100%; max-width: 450px; padding: 25px; margin: 0 auto; min-height: 640px; position: relative; display: flex; flex-direction: column; }
+        
+        #toast { 
+            position: fixed; top: -100px; left: 50%; transform: translateX(-50%); 
+            background: rgba(22, 27, 34, 0.95); border: 1px solid var(--border) !important;
+            backdrop-filter: blur(10px); color: white; padding: 12px 24px; border-radius: 20px; 
+            font-weight: 700; font-size: 13px; z-index: 10001; text-align: center; 
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5); transition: top 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            display: flex; align-items: center; gap: 10px; min-width: 250px; justify-content: center;
+        }
+        #toast.show { top: 30px; }
+
+        .modal-overlay { 
+            position: fixed; inset: 0; 
+            background: rgba(13, 17, 23, 0.6);
+            backdrop-filter: blur(12px);
+            display: none; justify-content: center; align-items: center; z-index: 9999; padding: 20px; 
+        }
+        .modal-sheet { background: var(--surface); border: 1px solid var(--border) !important; border-radius: 35px; width: 100%; max-width: 380px; padding: 30px; }
+
+        .nav-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; min-height: 40px; }
+        h1 { font-size: 1.4rem; font-weight: 900; letter-spacing: 3px; text-transform: uppercase; }
+        h1 span { color: var(--accent); }
+        
+        .breadcrumb { font-size: 12px; font-weight: 800; color: var(--neon-cyan); text-transform: uppercase; letter-spacing: 0.5px; text-align: left; margin-bottom: 25px; display: block; filter: drop-shadow(0 0 5px rgba(0, 242, 255, 0.2)); }
+        .breadcrumb span.sep { color: #ffffff; margin: 0 6px; font-weight: 400; opacity: 0.8; }
+
+        .pro-item { background: rgba(255,255,255,0.02); border: 1px solid var(--border) !important; border-radius: 24px; padding: 18px; margin-bottom: 12px; transition: 0.2s; position: relative; display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+        .pro-item:active { transform: scale(0.98); background: rgba(0, 242, 255, 0.05); }
+        .item-title { font-size: 1.2rem; font-weight: 800; color: var(--accent); display: flex; align-items: center; }
+
+        .border-danger { border: 1.5px solid var(--danger) !important; background: rgba(255, 77, 77, 0.05); }
+        .border-warning { border: 1.5px solid var(--warning) !important; background: rgba(255, 170, 0, 0.05); }
+        .icon-danger { color: var(--danger) !important; }
+        .icon-warning { color: var(--warning) !important; }
+
+        .stat-group { display: flex; gap: 8px; margin-top: 10px; }
+        .pill { padding: 4px 10px; border-radius: 10px; font-size: 10px; font-weight: 800; background: rgba(0,0,0,0.3); border: 1px solid var(--border) !important; color: var(--v62-color); }
+        .pill.p63 { color: var(--v63-color); }
+        .pill.p-earn { color: var(--accent); }
+        .pill b { font-size: 11px; margin-left: 4px; color: white; }
+
+        .btn-delete { color: var(--danger); opacity: 0.5; padding: 12px; cursor: pointer; }
+        .btn-primary { background: var(--accent); color: #000; padding: 18px; border-radius: 22px; font-weight: 900; width: 100%; text-transform: uppercase; letter-spacing: 1px; }
+        .btn-danger { background: var(--danger); color: white; padding: 18px; border-radius: 22px; font-weight: 900; width: 100%; text-transform: uppercase; }
+        .btn-add { background: var(--accent); color: black; font-size: 10px; font-weight: 900; padding: 8px 15px; border-radius: 12px; display: flex; align-items: center; gap: 6px; }
+
+        .input-box { background: rgba(0,0,0,0.4); border: 1px solid var(--border) !important; border-radius: 20px; padding: 18px; color: white; width: 100%; margin-bottom: 15px; font-weight: 700; text-align: center; font-size: 18px; }
+        .textarea-box { background: rgba(0,0,0,0.3); border: 1px solid var(--border) !important; border-radius: 20px; padding: 15px; color: white; width: 100%; min-height: 100px; resize: none; margin: 15px 0; font-size: 14px; }
+
+        .data-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 20px; }
+        .data-card { padding: 25px 10px; border-radius: 30px; text-align: center; border: 1px solid var(--border) !important; cursor: pointer; }
+        .data-card span { font-size: 10px; font-weight: 700; display: block; color: white; margin-top: 5px; opacity: 0.8; }
+        .c-62 { background: rgba(0, 212, 255, 0.08); color: var(--v62-color); }
+        .c-63 { background: rgba(255, 170, 0, 0.08); color: var(--v63-color); }
+
+        .note-area { background: rgba(255,255,255,0.02); border: 1px solid var(--border) !important; border-radius: 30px; padding: 20px; margin-top: 20px; }
+        
+        #scrollBtn {
+            position: fixed; bottom: 110px; right: 25px;
+            width: 42px; height: 42px;
+            background: rgba(124, 252, 0, 0.1); 
+            backdrop-filter: blur(8px);
+            color: var(--accent);
+            border: 1px solid rgba(124, 252, 0, 0.3) !important;
+            border-radius: 12px; 
+            display: none; justify-content: center; align-items: center;
+            font-size: 16px; z-index: 1000; cursor: pointer;
+            transition: all 0.3s ease;
+            opacity: 0;
+        }
+        #scrollBtn.show { display: flex; opacity: 1; }
+
+        .switch { position: relative; display: inline-block; width: 44px; height: 24px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; inset: 0; background-color: #333; transition: .4s; border-radius: 34px; }
+        .slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 4px; bottom: 4px; background-color: white; transition: .4s; border-radius: 50%; }
+        input:checked + .slider { background-color: var(--danger); }
+        input:checked + .slider:before { transform: translateX(20px); }
+
+        #loader { position: fixed; inset: 0; background: rgba(13, 17, 23, 0.8); backdrop-filter: blur(5px); display: none; justify-content: center; align-items: center; z-index: 10000; }
+        .spinner { width: 40px; height: 40px; border: 4px solid rgba(124, 252, 0, 0.1); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .hidden { display: none !important; }
+        #viewContainer { flex: 1; overflow-y: auto; padding-bottom: 20px; }
+        #viewContainer::-webkit-scrollbar { width: 0; }
+    </style>
+</head>
+<body>
+
+    <div id="loader"><div class="spinner"></div></div>
+    <div id="toast"></div>
+    
+    <div id="scrollBtn" onclick="toggleQuickScroll()">
+        <i id="scrollIcon" class="fa-solid fa-chevron-down"></i>
+    </div>
+
+    <div id="confirmModal" class="modal-overlay">
+        <div class="modal-sheet text-center">
+            <div id="confirmIcon" class="text-4xl mb-4"></div>
+            <h3 id="confirmTitle" class="text-lg font-black mb-2 uppercase text-white"></h3>
+            <p id="confirmText" class="text-dim text-xs font-semibold mb-8"></p>
+            <div class="flex flex-col gap-3">
+                <button id="confirmActionBtn"></button>
+                <button class="text-dim font-black text-[11px] py-2 uppercase tracking-widest" onclick="closeModal()">İPTAL ET</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="glass-card">
+        <div id="loginSection" class="hidden">
+            <div class="text-center mt-10 mb-10">
+                <h1 class="text-2xl">İD <span>TAKİP</span></h1>
+                <p class="text-dim text-[10px] mt-2 tracking-[4px] uppercase">Sistem Girişi</p>
+            </div>
+            <div class="flex flex-col px-2">
+                <input type="email" id="email" class="input-box" placeholder="E-Posta">
+                <input type="password" id="password" class="input-box" placeholder="Şifre">
+                <button class="btn-primary mt-4" onclick="handleLogin()">GİRİŞ YAP</button>
+            </div>
+        </div>
+
+        <div id="appSection" class="hidden flex flex-col h-full" style="height: 600px;">
+            <div class="nav-header">
+                <div class="w-10">
+                    <i id="btnBack" class="fa-solid fa-chevron-left text-accent hidden cursor-pointer p-2" onclick="handleBack()"></i>
+                </div>
+                <h1>İD <span>TAKİP</span></h1>
+                <div class="w-10 text-right">
+                    <i class="fa-solid fa-power-off text-dim cursor-pointer p-2" onclick="askLogout()"></i>
+                </div>
+            </div>
+            <div id="breadcrumb" class="breadcrumb"></div>
+            <div class="flex justify-end mb-6" id="addBtnArea">
+                <button id="btnCreate" class="btn-add" onclick="openCreateModal()">
+                    <i class="fa-solid fa-plus text-xs"></i> <span id="addText">İD EKLE</span>
+                </button>
+            </div>
+            <div id="viewContainer"></div>
+        </div>
+    </div>
+
+    <div id="createModal" class="modal-overlay">
+        <div class="modal-sheet">
+            <h2 id="modalTitle" class="text-center font-black text-accent mb-6 uppercase text-sm">Yeni Kayıt</h2>
+            <input type="text" id="masterInput" class="input-box" placeholder="İSİM VEYA NO" autocomplete="off">
+            <button class="btn-primary" onclick="processCreate()">KAYDET</button>
+            <button class="w-full mt-4 text-dim font-black text-[10px] uppercase" onclick="closeModal()">İPTAL</button>
+        </div>
+    </div>
+
+    <div id="dataModal" class="modal-overlay">
+        <div class="modal-sheet">
+            <h2 id="dataHeader" class="text-4xl font-black italic mb-8 text-center">6.2</h2>
+            <input type="number" id="inpUnits" class="input-box" placeholder="ADET">
+            <input type="number" id="inpPrice" class="input-box" placeholder="BİRİM FİYAT (₺)">
+            <button class="btn-primary" onclick="saveDataEntry()">KAYDET</button>
+            <button class="w-full mt-4 text-dim font-black text-[10px] uppercase" onclick="closeModal()">KAPAT</button>
+        </div>
+    </div>
+
+    <script>
+        let sb = null; let db = []; let settings = { tg_bot_token: '', tg_chat_id: '', tg_bot_status: false };
+        let state = { view: 'ids', path: [] }; let activeType = ''; const sep = '<span class="sep">»</span>';
+        const vContainer = document.getElementById('viewContainer');
+
+        function toggleLoader(s) { document.getElementById('loader').style.display = s ? 'flex' : 'none'; }
+        
+        vContainer.onscroll = function() {
+            const btn = document.getElementById('scrollBtn');
+            const icon = document.getElementById('scrollIcon');
+            if (vContainer.scrollHeight > vContainer.clientHeight && vContainer.scrollTop > 50) {
+                btn.classList.add('show');
+                icon.classList.toggle('fa-chevron-up', vContainer.scrollTop + vContainer.clientHeight >= vContainer.scrollHeight - 15);
+                icon.classList.toggle('fa-chevron-down', vContainer.scrollTop + vContainer.clientHeight < vContainer.scrollHeight - 15);
+            } else { btn.classList.remove('show'); }
+        };
+
+        function toggleQuickScroll() {
+            const icon = document.getElementById('scrollIcon');
+            vContainer.scrollTo({ top: icon.classList.contains('fa-chevron-down') ? vContainer.scrollHeight : 0, behavior: 'smooth' });
+        }
+
+        function showToast(m, color = 'var(--accent)') {
+            const t = document.getElementById('toast');
+            t.innerHTML = `<i class="fa-solid fa-circle-check" style="color:${color}"></i> ${m}`;
+            t.classList.add('show');
+            setTimeout(() => { t.classList.remove('show'); }, 2500);
+        }
+
+        window.addEventListener('popstate', () => {
+            if (state.path.length > 0) {
+                state.path.pop();
+                state.view = state.path.length === 0 ? 'ids' : (state.path.length === 1 ? 'streets' : 'buildings');
+                render();
+            }
+        });
+
+        function handleBack() { if (state.path.length > 0) history.back(); }
+        function enter(v, idx) { state.view = v; state.path.push(idx); history.pushState({view: v, path: [...state.path]}, ""); render(); vContainer.scrollTo({ top: 0 }); }
+
+        async function handleLogin() {
+            const email = document.getElementById('email').value.trim();
+            const pass = document.getElementById('password').value.trim();
+            
+            const urlParams = new URLSearchParams(window.location.search);
+            const url = urlParams.get('url') || localStorage.getItem('sb_url');
+            const key = urlParams.get('key') || localStorage.getItem('sb_key');
+
+            if(!url || !key) return showToast("Config Eksik!", "var(--danger)");
+
+            localStorage.removeItem('id_session');
+            sb = null;
+
+            toggleLoader(true);
+            try {
+                sb = window.supabase.createClient(url, key);
+                const { data, error } = await sb.auth.signInWithPassword({ email, password: pass });
+                
+                if(error) throw error;
+
+                localStorage.setItem('id_session', JSON.stringify(data.session));
+                localStorage.setItem('sb_url', url); 
+                localStorage.setItem('sb_key', key);
+                initApp();
+            } catch (err) { 
+                localStorage.removeItem('id_session');
+                document.getElementById('appSection').classList.add('hidden');
+                document.getElementById('loginSection').classList.remove('hidden');
+                showToast("E-Posta veya Şifre Yanlış!", "var(--danger)"); 
+            } finally { toggleLoader(false); }
+        }
+
+        async function initApp() {
+            const url = localStorage.getItem('sb_url');
+            const key = localStorage.getItem('sb_key');
+            if(!sb && url && key) sb = window.supabase.createClient(url, key);
+
+            const { data: { user }, error } = await sb.auth.getUser();
+
+            if (error || !user) {
+                localStorage.removeItem('id_session');
+                sb = null;
+                document.getElementById('appSection').classList.add('hidden');
+                document.getElementById('loginSection').classList.remove('hidden');
+                showToast("Oturum Geçersiz!", "var(--danger)");
+                return;
+            }
+
+            document.getElementById('loginSection').classList.add('hidden');
+            document.getElementById('appSection').classList.remove('hidden');
+            await fetchSettings();
+            await fetchData();
+        }
+
+        async function fetchSettings() {
+            try {
+                const { data, error } = await sb.from('ayarlar').select('*').eq('id', 1).single();
+                if(!error && data) settings = data;
+            } catch(e) {}
+        }
+
+        async function sendToTelegram() {
+            const { data: set } = await sb.from('ayarlar').select('*').eq('id', 1).single();
+            if(!set || !set.tg_bot_status || !set.tg_bot_token || !set.tg_chat_id) return;
+
+            const userEmail = JSON.parse(localStorage.getItem('id_session'))?.user?.email || 'Bilinmiyor';
+            const urlParam = localStorage.getItem('sb_url') || 'Belirtilmemiş';
+
+            const blob = new Blob([JSON.stringify(db, null, 2)], { type: 'application/json' });
+            const fileName = `yedek_${new Date().getTime()}.json`;
+
+            let caption = `📧 *E-POSTA:* ${userEmail}\n`;
+            caption += `🔗 *URL:* ${urlParam}`;
+
+            const formData = new FormData();
+            formData.append('chat_id', set.tg_chat_id);
+            formData.append('document', blob, fileName);
+            formData.append('caption', caption);
+            formData.append('parse_mode', 'Markdown');
+
+            try { await fetch(`https://api.telegram.org/bot${set.tg_bot_token}/sendDocument`, { method: 'POST', body: formData }); }
+            catch(e) { console.error("TG Error", e); }
+        }
+
+        async function fetchData() {
+            toggleLoader(true);
+            try {
+                const { data, error } = await sb.from('kimlikler').select('*, sokaklar(*, binalar(*))').order('tarih', { ascending: true });
+                
+                if(error) {
+                    if (error.code === '42501' || error.status === 401) throw new Error("Yetkisiz");
+                    throw error;
+                }
+
+                data.forEach(kimlik => {
+                    if(kimlik.sokaklar) {
+                        kimlik.sokaklar.sort((a, b) => new Date(a.tarih) - new Date(b.tarih));
+                        kimlik.sokaklar.forEach(sokak => { if(sokak.binalar) sokak.binalar.sort((a, b) => new Date(a.tarih) - new Date(b.tarih)); });
+                    }
+                });
+                db = data; render();
+            } catch (e) { 
+                localStorage.removeItem('id_session');
+                sb = null;
+                document.getElementById('appSection').classList.add('hidden');
+                document.getElementById('loginSection').classList.remove('hidden');
+                showToast("Oturum Süresi Doldu!", "var(--danger)"); 
+            } finally { toggleLoader(false); }
+        }
+
+        function render() {
+            const container = document.getElementById('viewContainer');
+            const breadcrumb = document.getElementById('breadcrumb');
+            const btnBack = document.getElementById('btnBack');
+            const addBtnArea = document.getElementById('addBtnArea');
+            const addText = document.getElementById('addText');
+
+            container.innerHTML = '';
+            btnBack.classList.toggle('hidden', state.view === 'ids');
+            addBtnArea.classList.toggle('hidden', state.view === 'details');
+
+            if (state.view === 'ids') {
+                breadcrumb.innerHTML = ""; addText.innerText = "İD EKLE";
+                db.forEach((item, idx) => {
+                    const stats = calcStats(item);
+                    container.innerHTML += `<div class="pro-item" onclick="enter('streets', ${idx})">
+                        <div class="flex-1"><span class="item-title">${item.isim}</span>
+                        <div class="text-[10px] text-dim font-bold uppercase mt-1 mb-1"><i class="fa-solid fa-map-location-dot mr-1"></i> ${item.sokaklar?.length || 0} SOKAK</div>
+                        <div class="stat-group"><div class="pill">6.2 <b>${stats.v62}</b></div><div class="pill p63">6.3 <b>${stats.v63}</b></div><div class="pill p-earn">₺ <b>${stats.total.toLocaleString()}</b></div></div></div>
+                        <i class="fa-solid fa-trash-can btn-delete" onclick="event.stopPropagation(); askDelete('kimlikler', '${item.id}')"></i></div>`;
+                });
+            } else if (state.view === 'streets') {
+                breadcrumb.innerHTML = db[state.path[0]].isim; addText.innerText = "SOKAK EKLE";
+                db[state.path[0]].sokaklar.forEach((s, idx) => {
+                    const sStats = calcSokakStats(s);
+                    container.innerHTML += `<div class="pro-item" onclick="enter('buildings', ${idx})">
+                        <div class="flex-1"><span class="item-title">${s.isim}</span>
+                        <div class="text-[10px] text-dim font-bold mt-1 uppercase"><i class="fa-solid fa-building mr-1"></i> ${s.binalar?.length || 0} BİNA</div>
+                        <div class="stat-group"><div class="pill">6.2 <b>${sStats.v62}</b></div><div class="pill p63">6.3 <b>${sStats.v63}</b></div></div></div>
+                        <i class="fa-solid fa-trash-can btn-delete" onclick="event.stopPropagation(); askDelete('sokaklar', '${s.id}')"></i></div>`;
+                });
+            } else if (state.view === 'buildings') {
+                breadcrumb.innerHTML = `${db[state.path[0]].isim} ${sep} ${db[state.path[0]].sokaklar[state.path[1]].isim}`;
+                addText.innerText = "BİNA EKLE";
+                db[state.path[0]].sokaklar[state.path[1]].binalar.forEach((b, idx) => {
+                    let status = b.montaj_durum ? '<i class="fa-solid fa-circle-exclamation icon-danger ml-2"></i>' : (b.notlar ? '<i class="fa-solid fa-note-sticky icon-warning ml-2"></i>' : '');
+                    container.innerHTML += `<div class="pro-item ${b.montaj_durum?'border-danger':(b.notlar?'border-warning':'')}" onclick="enter('details', ${idx})">
+                        <div class="flex-1"><span class="item-title">${b.isim}${status}</span>
+                        <div class="stat-group"><div class="pill">6.2 <b>${b.v62_adet || 0}</b></div><div class="pill p63">6.3 <b>${b.v63_adet || 0}</b></div></div></div>
+                        <i class="fa-solid fa-trash-can btn-delete" onclick="event.stopPropagation(); askDelete('binalar', '${b.id}')"></i></div>`;
+                });
+            } else if (state.view === 'details') {
+                const b = db[state.path[0]].sokaklar[state.path[1]].binalar[state.path[2]];
+                breadcrumb.innerHTML = `${db[state.path[0]].isim} ${sep} ${db[state.path[0]].sokaklar[state.path[1]].isim} ${sep} ${b.isim}`;
+                container.innerHTML = `
+                <div class="data-grid">
+                    <div class="data-card c-62" onclick="openData('6.2')">
+                        <div class="text-3xl font-black italic">6.2</div>
+                        <span>Adet: ${b.v62_adet || 0}</span>
+                        <span>Fiyat: ₺${b.v62_fiyat || 0}</span>
+                    </div>
+                    <div class="data-card c-63" onclick="openData('6.3')">
+                        <div class="text-3xl font-black italic">6.3</div>
+                        <span>Adet: ${b.v63_adet || 0}</span>
+                        <span>Fiyat: ₺${b.v63_fiyat || 0}</span>
+                    </div>
+                </div>
+                <div class="note-area">
+                    <div class="flex justify-between items-center mb-4"><span class="text-xs font-bold uppercase">Montaj Yapılamadı</span>
+                    <label class="switch"><input type="checkbox" id="toggleHata" ${b.montaj_durum?'checked':''}><span class="slider"></span></label></div>
+                    <textarea id="txtNote" class="textarea-box" placeholder="Binaya dair özel notlarınızı buraya yazabilirsiniz...">${b.notlar || ''}</textarea>
+                    <button class="btn-primary" onclick="updateBinaDetails()">KAYDET</button></div>`;
+            }
+        }
+
+        async function updateBinaDetails() {
+            const b = db[state.path[0]].sokaklar[state.path[1]].binalar[state.path[2]];
+            const h = document.getElementById('toggleHata').checked;
+            const n = document.getElementById('txtNote').value;
+            toggleLoader(true);
+            try { 
+                await sb.from('binalar').update({ montaj_durum: h, notlar: n }).eq('id', b.id); 
+                b.montaj_durum=h; b.notlar=n; showToast("Kaydedildi"); 
+                await sendToTelegram();
+            } catch(e) { showToast("Hata!"); } finally { toggleLoader(false); }
+        }
+
+        async function processCreate() {
+            const v = document.getElementById('masterInput').value.trim(); if(!v) return;
+            let exists = false;
+            let payload = { isim: v }; let table = '';
+            
+            if (state.view === 'ids') { 
+                table = 'kimlikler'; 
+                exists = db.some(x => x.isim.toLowerCase() === v.toLowerCase());
+            }
+            else if (state.view === 'streets') { 
+                table = 'sokaklar'; payload.kimlik_id = db[state.path[0]].id; 
+                exists = db[state.path[0]].sokaklar.some(x => x.isim.toLowerCase() === v.toLowerCase());
+            }
+            else if (state.view === 'buildings') { 
+                table = 'binalar'; payload.sokak_id = db[state.path[0]].sokaklar[state.path[1]].id; 
+                exists = db[state.path[0]].sokaklar[state.path[1]].binalar.some(x => x.isim.toLowerCase() === v.toLowerCase());
+            }
+
+            if (exists) { showToast("Bu isim zaten mevcut!", "var(--danger)"); return; }
+
+            toggleLoader(true);
+            try { 
+                await sb.from(table).insert([payload]); 
+                await fetchData(); closeModal(); showToast("Eklendi"); 
+                await sendToTelegram();
+            } catch (e) { showToast("Hata!"); } finally { toggleLoader(false); }
+        }
+
+        async function saveDataEntry() {
+            const b = db[state.path[0]].sokaklar[state.path[1]].binalar[state.path[2]];
+            const u = parseInt(document.getElementById('inpUnits').value) || 0;
+            const p = parseFloat(document.getElementById('inpPrice').value) || 0;
+            toggleLoader(true); 
+            const fU = activeType === '6.2' ? 'v62_adet' : 'v63_adet'; const fP = activeType === '6.2' ? 'v62_fiyat' : 'v63_fiyat';
+            try { 
+                await sb.from('binalar').update({ [fU]: u, [fP]: p }).eq('id', b.id); 
+                b[fU] = u; b[fP] = p; showToast("Kaydedildi"); closeModal(); render(); 
+                await sendToTelegram();
+            } catch(e) { showToast("Hata!"); } finally { toggleLoader(false); }
+        }
+
+        function askLogout() {
+            document.getElementById('confirmIcon').innerHTML = '<i class="fa-solid fa-power-off text-dim"></i>';
+            document.getElementById('confirmTitle').innerText = "ÇIKIŞ YAPILSIN MI?";
+            document.getElementById('confirmText').innerText = "Oturumunuz sonlandırılacaktır.";
+            const btn = document.getElementById('confirmActionBtn');
+            btn.innerText = "ÇIKIŞ YAP"; btn.className = "btn-danger";
+            btn.onclick = () => { localStorage.removeItem('id_session'); location.reload(); };
+            document.getElementById('confirmModal').style.display = 'flex';
+        }
+
+        function askDelete(table, id) {
+            document.getElementById('confirmIcon').innerHTML = '<i class="fa-solid fa-trash-can text-danger"></i>';
+            document.getElementById('confirmTitle').innerText = "SİLİNSİN MI?";
+            document.getElementById('confirmText').innerText = "Bu işlem geri alınamaz.";
+            const btn = document.getElementById('confirmActionBtn');
+            btn.innerText = "SİL"; btn.className = "btn-danger";
+            btn.onclick = async () => {
+                toggleLoader(true);
+                try { 
+                    await sb.from(table).delete().eq('id', id); 
+                    await fetchData(); showToast("Silindi"); closeModal(); 
+                    await sendToTelegram();
+                } catch(e) { showToast("Hata!"); } finally { toggleLoader(false); }
+            };
+            document.getElementById('confirmModal').style.display = 'flex';
+        }
+
+        function openCreateModal() { 
+            const mTitle = document.getElementById('modalTitle');
+            if(state.view === 'ids') mTitle.innerText = "YENİ İD KAYDI";
+            else if(state.view === 'streets') mTitle.innerText = "YENİ SOKAK KAYDI";
+            else if(state.view === 'buildings') mTitle.innerText = "YENİ BİNA KAYDI";
+            
+            document.getElementById('masterInput').value = ''; 
+            document.getElementById('createModal').style.display = 'flex'; 
+        }
+
+        function openData(type) {
+            activeType = type; const b = db[state.path[0]].sokaklar[state.path[1]].binalar[state.path[2]];
+            document.getElementById('dataHeader').innerText = type;
+            document.getElementById('inpUnits').value = (type === '6.2' ? b.v62_adet : b.v63_adet) || '';
+            document.getElementById('inpPrice').value = (type === '6.2' ? b.v62_fiyat : b.v63_fiyat) || '';
+            document.getElementById('dataModal').style.display = 'flex';
+        }
+        function closeModal() { document.querySelectorAll('.modal-overlay').forEach(m => m.style.display='none'); }
+
+        function calcStats(item) {
+            let v62 = 0, v63 = 0, total = 0;
+            if(item.sokaklar) item.sokaklar.forEach(s => { 
+                const sStats = calcSokakStats(s);
+                v62 += sStats.v62; v63 += sStats.v63; total += sStats.total;
+            });
+            return { v62, v63, total };
+        }
+
+        function calcSokakStats(sokak) {
+            let v62 = 0, v63 = 0, total = 0;
+            if(sokak.binalar) sokak.binalar.forEach(b => { 
+                v62 += (b.v62_adet || 0); 
+                v63 += (b.v63_adet || 0); 
+                total += ((b.v62_adet || 0) * (b.v62_fiyat || 0)) + ((b.v63_adet || 0) * (b.v63_fiyat || 0)); 
+            });
+            return { v62, v63, total };
+        }
+
+        window.onload = () => {
+            const session = localStorage.getItem('id_session');
+            const urlParams = new URLSearchParams(window.location.search);
+            const url = urlParams.get('url') || localStorage.getItem('sb_url');
+            const key = urlParams.get('key') || localStorage.getItem('sb_key');
+
+            if (session && url && key) initApp();
+            else document.getElementById('loginSection').classList.remove('hidden');
+            document.body.style.visibility = 'visible';
+        };
+    </script>
+</body>
+</html>
+
